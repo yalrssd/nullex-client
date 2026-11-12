@@ -2,12 +2,11 @@ import { useTranslation } from 'react-i18next'
 import { useCallback, useMemo } from 'react'
 import { setMainLanguage } from '@renderer/utils/ipc'
 
-export type Language = 'zh-CN' | 'en-US' | 'ru-RU'
+export type Language = 'ru-RU' | 'en-US'
 
 export const LANGUAGES = [
-  { value: 'zh-CN' as const, labelKey: 'languages.zhCN', nativeLabelKey: 'languages.native.zhCN' },
-  { value: 'en-US' as const, labelKey: 'languages.enUS', nativeLabelKey: 'languages.native.enUS' },
-  { value: 'ru-RU' as const, labelKey: 'languages.ruRU', nativeLabelKey: 'languages.native.ruRU' }
+  { value: 'ru-RU' as const, labelKey: 'languages.ruRU', nativeLabelKey: 'languages.native.ruRU' },
+  { value: 'en-US' as const, labelKey: 'languages.enUS', nativeLabelKey: 'languages.native.enUS' }
 ]
 
 export const useLanguage = () => {

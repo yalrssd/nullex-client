@@ -46,7 +46,7 @@ const PortSetting: React.FC = () => {
   }
   const formatAuth = (user: string, pass?: string): string => `${user}:${pass || ''}`
   const portInput = (key: MihomoPortKey): number =>
-    portInputs[key] ?? ports?.[key].value ?? controledMihomoConfig?.[key] ?? 0
+    portInputs[key] ?? ports?.[key]?.value ?? controledMihomoConfig?.[key] ?? 0
   const clearPortInput = (key: MihomoPortKey): void => {
     setPortInputs((inputs) => {
       const next = { ...inputs }

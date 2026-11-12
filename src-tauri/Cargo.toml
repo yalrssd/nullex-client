@@ -5,6 +5,10 @@ description = "Nullex VPN Client (Rust + Tauri 2 + Mihomo)"
 authors = ["Nullex Team"]
 edition = "2021"
 
+[[bin]]
+name = "Nullex"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

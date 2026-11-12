@@ -38,31 +38,40 @@ pub async fn get_effective_ports(state: &Arc<AppState>) -> Value {
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
-    if !proxy_mode && !tun_enable {
-        return json!({
-            "port": 0,
-            "socksPort": 0,
-            "redirPort": 0,
-            "tproxyPort": 0,
-            "mixedPort": 0
-        });
-    }
+    let is_active = proxy_mode || tun_enable;
 
+    let port = port_val(&mihomo_cfg, "port");
+    let socks_port = port_val(&mihomo_cfg, "socks-port");
+    let redir_port = port_val(&mihomo_cfg, "redir-port");
+    let tproxy_port = port_val(&mihomo_cfg, "tproxy-port");
     let mixed_port = {
         let p = port_val(&mihomo_cfg, "mixed-port");
-        if p == 0 {
+        if p == 0 && is_active {
             7897
         } else {
             p
         }
     };
 
+    let p_info = |val: u16| {
+        json!({
+            "value": if is_active { val } else { 0 },
+            "profileValue": null,
+            "fromProfile": false
+        })
+    };
+
     json!({
-        "port": port_val(&mihomo_cfg, "port"),
-        "socksPort": port_val(&mihomo_cfg, "socks-port"),
-        "redirPort": port_val(&mihomo_cfg, "redir-port"),
-        "tproxyPort": port_val(&mihomo_cfg, "tproxy-port"),
-        "mixedPort": mixed_port
+        "port": p_info(port),
+        "socks-port": p_info(socks_port),
+        "redir-port": p_info(redir_port),
+        "tproxy-port": p_info(tproxy_port),
+        "mixed-port": p_info(mixed_port),
+        "portNum": if is_active { port } else { 0 },
+        "socksPort": if is_active { socks_port } else { 0 },
+        "redirPort": if is_active { redir_port } else { 0 },
+        "tproxyPort": if is_active { tproxy_port } else { 0 },
+        "mixedPort": if is_active { mixed_port } else { 0 }
     })
 }
 

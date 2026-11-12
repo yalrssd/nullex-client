@@ -19,7 +19,7 @@ const LanguageConfig: React.FC = () => {
         <Select
           value={currentLanguage}
           onValueChange={(value) => {
-            changeLanguage(value as 'zh-CN' | 'en-US' | 'ru-RU')
+            changeLanguage(value as 'ru-RU' | 'en-US')
           }}
         >
           <SelectTrigger size="sm" className="w-[200px]">

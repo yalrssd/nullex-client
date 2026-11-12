@@ -348,7 +348,11 @@ pub async fn ipc_invoke(
         "getRuntimeConfigStr" => get_runtime_config_str(st).await.map(|s| json!(s)),
         "getRuntimeConfig" => get_runtime_config(st).await,
         "getEffectivePorts" => Ok(get_effective_ports(st).await),
-        "getEffectiveLogLevel" => Ok(json!(get_effective_log_level(st).await)),
+        "getEffectiveLogLevel" => Ok(json!({
+            "value": get_effective_log_level(st).await,
+            "profileValue": null,
+            "fromProfile": false
+        })),
 
         // Windows Service
         "serviceStatus" => service_status().await.map(|s| json!(s)),
