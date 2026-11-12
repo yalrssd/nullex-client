@@ -1,0 +1,55 @@
+[package]
+name = "nullex-tauri"
+version = "1.1.0"
+description = "Nullex VPN Client (Rust + Tauri 2 + Mihomo)"
+authors = ["Nullex Team"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico", "devtools"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml_ng = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "gzip", "brotli", "deflate"] }
+hyper = { version = "1", features = ["http1", "client"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
+ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8", "pem"] }
+pkcs8 = { version = "0.10", features = ["pem", "alloc"] }
+rand = "0.8"
+base64 = "0.22"
+sha2 = "0.10"
+hex = "0.4"
+url = "2"
+urlencoding = "2"
+chrono = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+arboard = "3"
+encoding_rs = "0.8"
+network-interface = "2"
+winreg = "0.55"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_Security_Cryptography",
+  "Win32_System_Memory",
+  "Win32_System_Threading",
+  "Win32_UI_Shell"
+] }

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Nullex",
+  "version": "1.1.0",
+  "identifier": "com.nullex.client",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Nullex",
+        "width": 980,
+        "height": 680,
+        "minWidth": 780,
+        "minHeight": 560,
+        "center": true,
+        "decorations": false,
+        "resizable": true,
+        "dragDropEnabled": false,
+        "visible": false,
+        "backgroundColor": "#0A0A0A"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": [
+      "resources/**/*"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerIcon": "icons/installerIcon.ico",
+        "languages": ["Russian", "English"],
+        "displayLanguageSelector": false,
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["clash", "mihomo", "nullex"]
+      }
+    }
+  }
+}

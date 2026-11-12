@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" lang="zh" />
+    <title>Nullex Floating</title>
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' http://tauri.localhost tauri: http://ipc.localhost https://ipc.localhost blob: data:; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src * data: blob:; connect-src * ipc: http://ipc.localhost https://ipc.localhost ws: wss:;"
+    />
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/floating.tsx"></script>
+  </body>
+</html>

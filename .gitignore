@@ -1,0 +1,19 @@
+# Node
+node_modules/
+dist/
+dist-electron/
+.pnpm-debug.log*
+
+# Rust / Cargo
+src-tauri/target/
+Cargo.lock
+
+# Tauri build artifacts
+src-tauri/WixTools/
+src-tauri/gen/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.local
+.idea/
