@@ -18,20 +18,14 @@ const resources = {
   'ru-RU': { translation: ruRU }
 }
 
-// Get saved language from localStorage or use system language
+// Get saved language from localStorage or default to English (en-US)
 const getSavedLanguage = (): string => {
   const saved = localStorage.getItem('language')
-  if (saved && ['zh-CN', 'en-US', 'ru-RU'].includes(saved)) {
+  if (saved && ['en-US', 'ru-RU'].includes(saved)) {
     return saved
   }
 
-  // Try to detect system language
-  const systemLang = navigator.language || 'zh-CN'
-  if (systemLang.startsWith('zh')) return 'zh-CN'
-  if (systemLang.startsWith('ru')) return 'ru-RU'
-  if (systemLang.startsWith('en')) return 'en-US'
-
-  return 'ru-RU' // Default to Chinese
+  return 'en-US'
 }
 
 const savedLanguage = getSavedLanguage()

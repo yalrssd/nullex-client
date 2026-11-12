@@ -65,18 +65,7 @@ const App: React.FC = () => {
     }
   }, [])
 
-  useEffect(() => {
-    const tourShown = window.localStorage.getItem('tourShown')
-    if (!tourShown) {
-      import('@renderer/utils/driver').then(({ startTour }) => {
-        startTour(navigate, {
-          onMainGuideCompleted: (): void => {
-            window.localStorage.setItem('tourShown', 'true')
-          }
-        })
-      })
-    }
-  }, [])
+
 
   useEffect(() => {
     setNativeTheme(appTheme)
