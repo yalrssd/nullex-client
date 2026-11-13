@@ -37,6 +37,55 @@ use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use url::Url;
 
+/// On Windows: subclass the main window HWND so we can intercept
+/// WM_QUERYENDSESSION / WM_ENDSESSION and set is_quitting = true
+/// *before* Tauri emits CloseRequested — this prevents Nullex from
+/// blocking system shutdown / restart.
+#[cfg(windows)]
+fn install_shutdown_hook(hwnd_raw: isize, state: Arc<AppState>) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetWindowLongPtrW, GetWindowLongPtrW, CallWindowProcW,
+        GWLP_WNDPROC, WM_QUERYENDSESSION, WM_ENDSESSION,
+    };
+
+    static STATE_PTR: std::sync::OnceLock<Arc<AppState>> = std::sync::OnceLock::new();
+    let _ = STATE_PTR.set(state);
+
+    static ORIG_PROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+    unsafe extern "system" fn subclass_proc(
+        hwnd: windows_sys::Win32::Foundation::HWND,
+        msg: u32,
+        wparam: windows_sys::Win32::Foundation::WPARAM,
+        lparam: windows_sys::Win32::Foundation::LPARAM,
+    ) -> windows_sys::Win32::Foundation::LRESULT {
+        if msg == WM_QUERYENDSESSION || msg == WM_ENDSESSION {
+            if let Some(st) = STATE_PTR.get() {
+                st.is_quitting.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            if msg == WM_QUERYENDSESSION {
+                return 1; // TRUE = allow session to end
+            }
+        }
+        let orig = ORIG_PROC.load(std::sync::atomic::Ordering::SeqCst);
+        if orig != 0 {
+            CallWindowProcW(
+                Some(std::mem::transmute(orig)),
+                hwnd, msg, wparam, lparam,
+            )
+        } else {
+            0
+        }
+    }
+
+    unsafe {
+        let hwnd = hwnd_raw as windows_sys::Win32::Foundation::HWND;
+        let orig = GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
+        ORIG_PROC.store(orig, std::sync::atomic::Ordering::SeqCst);
+        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, subclass_proc as *const () as isize);
+    }
+}
+
 fn init_dirs_and_base_files() {
     for d in [
         data_dir(),
@@ -275,6 +324,16 @@ pub fn run() {
                 let win_clone = main_win.clone();
                 let ah_ev = app.handle().clone();
                 let st_ev = state_setup.clone();
+
+                // Install Windows shutdown hook so WM_QUERYENDSESSION
+                // sets is_quitting = true before CloseRequested fires,
+                // preventing Nullex from blocking system shutdown/restart.
+                #[cfg(windows)]
+                {
+                    if let Ok(hwnd) = main_win.hwnd() {
+                        install_shutdown_hook(hwnd.0 as isize, state_setup.clone());
+                    }
+                }
                 main_win.on_window_event(move |event| match event {
                     WindowEvent::CloseRequested { api, .. } => {
                         if !st_ev.is_quitting.load(Ordering::SeqCst) {
