@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
-const REPO_OWNER: &str = "yalrssd";
+const REPO_OWNER: &str = "nullex-app";
 const REPO_NAME: &str = "nullex-client";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 

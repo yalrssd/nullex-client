@@ -122,7 +122,7 @@ const Settings: React.FC = () => {
             className="app-nodrag hover:bg-white/10 transition-colors"
             title={t('pages.settings.githubRepo')}
             onClick={() => {
-              window.open('https://github.com/yalrssd/nullex-client')
+              window.open('https://github.com/nullex-app/nullex-client')
             }}
           >
             <Github className="w-4 h-4 text-foreground/80 hover:text-foreground" />
