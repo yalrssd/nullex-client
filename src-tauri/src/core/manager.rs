@@ -493,6 +493,8 @@ fn start_core_locked<'a>(
 
     // Monitor unexpected exit & auto-restart up to 3 times unless stopped
     spawn_exit_watcher(state.clone(), app_handle.cloned(), pid);
+    // Monitor pipe health: auto-restart if core stops responding
+    spawn_pipe_watchdog(state.clone(), app_handle.cloned(), pid);
 
     on_core_ready(state, app_handle, configured_log_level).await;
     Ok(())
@@ -542,6 +544,62 @@ async fn on_core_ready(
     {
         start_network_detection(state, app_handle).await;
     }
+}
+
+/// Watchdog: pings the mihomo pipe every 30s.
+/// If 3 consecutive pings fail while the process is still running
+/// (zombie / stuck state), auto-restarts the core silently.
+fn spawn_pipe_watchdog(state: Arc<AppState>, app_handle: Option<AppHandle>, watched_pid: u32) {
+    tokio::spawn(async move {
+        let mut fail_count = 0u32;
+        loop {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+
+            if state.is_quitting.load(Ordering::SeqCst)
+                || state.core_pid.load(Ordering::SeqCst) != watched_pid
+            {
+                return;
+            }
+
+            let status_ok = {
+                let s = state.core_state.read().await;
+                s.status == "running"
+            };
+            if !status_ok {
+                return;
+            }
+
+            match mihomo_version().await {
+                Ok(_) => {
+                    fail_count = 0;
+                }
+                Err(_) => {
+                    fail_count += 1;
+                    let _ = append_core_log_line(&format!(
+                        "[Watchdog] Pipe health check failed ({fail_count}/3)"
+                    ))
+                    .await;
+
+                    if fail_count >= 3 {
+                        if state.core_pid.load(Ordering::SeqCst) != watched_pid
+                            || state.is_quitting.load(Ordering::SeqCst)
+                        {
+                            return;
+                        }
+                        let _ = append_core_log_line(
+                            "[Watchdog] Core unresponsive — triggering auto-restart",
+                        )
+                        .await;
+                        if let Some(ref handle) = app_handle {
+                            let _ = handle.emit("ipc-core-restarting", json!({}));
+                        }
+                        let _ = start_core_locked(&state, app_handle.as_ref()).await;
+                        return;
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn spawn_exit_watcher(state: Arc<AppState>, app_handle: Option<AppHandle>, watched_pid: u32) {
