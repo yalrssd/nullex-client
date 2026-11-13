@@ -255,6 +255,10 @@ export async function checkElevateTask(): Promise<boolean> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkElevateTask'))
 }
 
+export async function isRunningAsAdmin(): Promise<boolean> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('isRunningAsAdmin'))
+}
+
 export async function needsFirstRunAdmin(): Promise<boolean> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('needsFirstRunAdmin'))
 }

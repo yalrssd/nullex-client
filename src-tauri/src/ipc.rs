@@ -388,6 +388,7 @@ pub async fn ipc_invoke(
             delete_elevate_task().await?;
             Ok(Value::Null)
         }
+        "isRunningAsAdmin" => Ok(json!(crate::utils::elevation::is_running_as_admin())),
         "needsFirstRunAdmin" => Ok(json!(st.needs_first_run_admin.load(Ordering::SeqCst))),
         "declineElevation" => {
             st.needs_first_run_admin.store(false, Ordering::SeqCst);
