@@ -304,6 +304,9 @@ export default {
     tun: {
       title: 'Настройки TUN',
       takeOverTun: 'Управлять настройками TUN',
+      diagnostics: 'Диагностика TUN',
+      runDiagnostics: 'Запустить диагностику',
+      diagnosticsCopied: 'Отчёт диагностики скопирован в буфер обмена!',
       resetFirewall: 'Сбросить брандмауэр',
       resetFirewallButton: 'Сбросить брандмауэр',
       firewallResetSuccess: 'Брандмауэр успешно сброшен',

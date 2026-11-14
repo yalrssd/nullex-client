@@ -124,6 +124,15 @@ fn init_dirs_and_base_files() {
             let _ = std::fs::copy(&src, &dst);
         }
     }
+
+    #[cfg(windows)]
+    {
+        let wintun_src = files_src.join("wintun.dll");
+        let wintun_dst = work_dir.join("wintun.dll");
+        if wintun_src.exists() && !wintun_dst.exists() {
+            let _ = std::fs::copy(&wintun_src, &wintun_dst);
+        }
+    }
 }
 
 async fn cleanup_old_logs(max_days: u64) {

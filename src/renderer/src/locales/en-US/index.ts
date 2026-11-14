@@ -301,6 +301,9 @@ export default {
     tun: {
       title: 'Virtual Network Interface Settings',
       takeOverTun: 'Take over TUN settings',
+      diagnostics: 'TUN Diagnostics',
+      runDiagnostics: 'Run Diagnostics',
+      diagnosticsCopied: 'Diagnostic report copied to clipboard!',
       resetFirewall: 'Reset Firewall',
       resetFirewallButton: 'Reset Firewall',
       firewallResetSuccess: 'Firewall reset successfully',

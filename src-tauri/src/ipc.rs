@@ -403,6 +403,14 @@ pub async fn ipc_invoke(
             setup_firewall().await?;
             Ok(Value::Null)
         }
+        "checkTunStatus" => {
+            let res = crate::sys::diagnostics::check_tun_status().await;
+            Ok(json!(res))
+        }
+        "runTunDiagnostics" => {
+            let res = crate::sys::diagnostics::run_tun_diagnostics(&st).await;
+            Ok(res)
+        }
         "openUWPTool" => {
             open_uwp_tool().await?;
             Ok(Value::Null)

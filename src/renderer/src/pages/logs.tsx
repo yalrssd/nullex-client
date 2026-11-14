@@ -31,6 +31,7 @@ const Logs: React.FC = () => {
   const storeLogs = useLogsStore((s) => s.logs)
   const clearLogs = useLogsStore((s) => s.clear)
   const [filter, setFilter] = useState('')
+  const [selectedLevel, setSelectedLevel] = useState<'all' | 'error' | 'warning' | 'info' | 'tun'>('all')
   const [paused, setPaused] = useState(false)
   const [atTop, setAtTop] = useState(true)
   const virtuosoRef = useRef<VirtuosoHandle>(null)
@@ -44,19 +45,35 @@ const Logs: React.FC = () => {
   }
 
   const filteredLogs = useMemo(() => {
-    if (filter === '') return shownLogs
-    return shownLogs.filter((log) => matchesFilter(log, filter))
-  }, [shownLogs, filter])
+    return shownLogs.filter((log) => {
+      if (selectedLevel === 'tun') {
+        const payloadLow = log.payload.toLowerCase()
+        if (!payloadLow.includes('tun') && !payloadLow.includes('wintun')) return false
+      } else if (selectedLevel !== 'all') {
+        if (log.type.toLowerCase() !== selectedLevel) return false
+      }
+      if (filter !== '') {
+        return matchesFilter(log, filter)
+      }
+      return true
+    })
+  }, [shownLogs, filter, selectedLevel])
 
   const newCount = useMemo(() => {
     const shownTopId = shownLogs[0]?.id ?? 0
     let count = 0
     for (const log of storeLogs) {
       if (log.id <= shownTopId) break
+      if (selectedLevel === 'tun') {
+        const payloadLow = log.payload.toLowerCase()
+        if (!payloadLow.includes('tun') && !payloadLow.includes('wintun')) continue
+      } else if (selectedLevel !== 'all') {
+        if (log.type.toLowerCase() !== selectedLevel) continue
+      }
       if (filter === '' || matchesFilter(log, filter)) count++
     }
     return count
-  }, [storeLogs, shownLogs, filter])
+  }, [storeLogs, shownLogs, filter, selectedLevel])
 
   const showLatest = useCallback(() => {
     setPaused(false)
@@ -119,6 +136,27 @@ const Logs: React.FC = () => {
           >
             <Trash2 className="text-lg text-destructive" />
           </Button>
+        </div>
+        <div className="w-full flex items-center gap-1.5 px-2 pb-2">
+          {(
+            [
+              ['all', 'ALL'],
+              ['error', 'ERROR'],
+              ['warning', 'WARN'],
+              ['info', 'INFO'],
+              ['tun', 'TUN']
+            ] as const
+          ).map(([lvl, label]) => (
+            <Button
+              key={lvl}
+              size="sm"
+              variant={selectedLevel === lvl ? 'default' : 'outline'}
+              className="h-6 text-xs px-2.5 rounded-full"
+              onClick={() => setSelectedLevel(lvl)}
+            >
+              {label}
+            </Button>
+          ))}
         </div>
         <Separator className="mx-2" />
       </div>

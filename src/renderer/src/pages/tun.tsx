@@ -16,7 +16,7 @@ import SettingCard from '@renderer/components/base/base-setting-card'
 import SettingItem from '@renderer/components/base/base-setting-item'
 import EditableList from '@renderer/components/base/base-list-editor'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
-import { restartCore, setupFirewall } from '@renderer/utils/ipc'
+import { restartCore, setupFirewall, runTunDiagnostics } from '@renderer/utils/ipc'
 import { platform } from '@renderer/utils/init'
 import React, { useState } from 'react'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
@@ -114,6 +114,29 @@ const Tun: React.FC = () => {
               }}
             />
           </SettingItem>
+          {platform === 'win32' && (
+            <SettingItem title={t('pages.tun.diagnostics', 'TUN Diagnostics')} divider>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loading}
+                onClick={async () => {
+                  setLoading(true)
+                  try {
+                    const diag = await runTunDiagnostics()
+                    await navigator.clipboard.writeText(diag.summary)
+                    toast.success(t('pages.tun.diagnosticsCopied', 'Diagnostics report copied to clipboard!'))
+                  } catch (e) {
+                    toast.error(`${e}`)
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+              >
+                {t('pages.tun.runDiagnostics', 'Run Diagnostics')}
+              </Button>
+            </SettingItem>
+          )}
           {platform === 'win32' && (
             <SettingItem title={t('pages.tun.resetFirewall')} divider>
               <Button

@@ -551,6 +551,40 @@ export async function setMainLanguage(lang: string): Promise<void> {
   await window.electron.ipcRenderer.invoke('setLanguage', lang)
 }
 
+export interface TunStatusResult {
+  isUp: boolean
+  adapterFound: boolean
+  adapterName?: string
+  hasError: boolean
+  errorCode?: string
+  errorMessage?: string
+  suggestion?: string
+}
+
+export interface TunDiagnosticsResult {
+  isAdmin: boolean
+  serviceStatus: string
+  tunAdapterFound: boolean
+  wintunSidecarExists: boolean
+  wintunWorkExists: boolean
+  mihomoProcesses: Array<{ pid: number; path: string; isNullex: boolean }>
+  windivertDetected: boolean
+  windivertProcesses: string[]
+  otherVpns: string[]
+  adapters: Array<{ name: string; isTun: boolean; addresses: string[] }>
+  dnsRttMs: number
+  tunLogs: string[]
+  summary: string
+}
+
+export async function checkTunStatus(): Promise<TunStatusResult> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkTunStatus'))
+}
+
+export async function runTunDiagnostics(): Promise<TunDiagnosticsResult> {
+  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('runTunDiagnostics'))
+}
+
 // Override window.alert to use toast notifications instead of system dialogs
 async function alert<T>(msg: T): Promise<void> {
   const { toast } = await import('sonner')

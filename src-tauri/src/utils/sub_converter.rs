@@ -694,8 +694,9 @@ fn assemble_mihomo_yaml(proxies: Vec<Value>) -> String {
         .iter()
         .filter_map(|p| p.get("name").cloned())
         .collect();
-    let mut proxy_group_list = Vec::with_capacity(names.len() + 2);
+    let mut proxy_group_list = Vec::with_capacity(names.len() + 3);
     proxy_group_list.push(json!("Auto"));
+    proxy_group_list.push(json!("Fallback"));
     proxy_group_list.extend(names.clone());
     proxy_group_list.push(json!("DIRECT"));
 
@@ -714,9 +715,21 @@ fn assemble_mihomo_yaml(proxies: Vec<Value>) -> String {
             {
                 "name": "Auto",
                 "type": "url-test",
+                "proxies": names.clone(),
+                "url": "http://www.gstatic.com/generate_204",
+                "interval": 300,
+                "tolerance": 50,
+                "lazy": true,
+                "timeout": 5000
+            },
+            {
+                "name": "Fallback",
+                "type": "fallback",
                 "proxies": names,
-                "url": "http://cp.cloudflare.com",
-                "interval": 300
+                "url": "http://www.gstatic.com/generate_204",
+                "interval": 300,
+                "lazy": true,
+                "timeout": 5000
             }
         ],
         "rules": ["GEOIP,LAN,DIRECT,no-resolve", "MATCH,Proxy"]
