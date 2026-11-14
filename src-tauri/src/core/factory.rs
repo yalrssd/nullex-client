@@ -255,32 +255,33 @@ pub async fn generate_profile(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+    let profile_has_dns = profile.get("dns").is_some();
+    let profile_has_sniff = profile.get("sniffer").is_some();
+    let profile_has_tun = profile.get("tun").is_some();
+
     if let Some(c_obj) = controlled.as_object_mut() {
-        if !control_dns {
+        if !control_dns && profile_has_dns {
             c_obj.remove("dns");
             c_obj.remove("hosts");
         }
-        if !control_sniff {
+        if !control_sniff && profile_has_sniff {
             c_obj.remove("sniffer");
         }
-        if !control_tun {
-            let tun_enable = c_obj
-                .get("tun")
-                .and_then(|t| t.get("enable"))
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let route_exclude = c_obj
-                .get("tun")
-                .and_then(|t| t.get("route-exclude-address"))
-                .cloned();
-            let mut mini_tun = Map::new();
-            mini_tun.insert("enable".into(), json!(tun_enable));
-            if let Some(re) = route_exclude {
-                if !re.is_null() {
-                    mini_tun.insert("route-exclude-address".into(), re);
+        if !control_tun && profile_has_tun {
+            if let Some(p_tun) = profile.get_mut("tun").and_then(Value::as_object_mut) {
+                let tun_enable = c_obj
+                    .get("tun")
+                    .and_then(|t| t.get("enable"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                p_tun.insert("enable".into(), json!(tun_enable));
+                if !p_tun.contains_key("route-exclude-address") {
+                    if let Some(re) = c_obj.get("tun").and_then(|t| t.get("route-exclude-address")) {
+                        p_tun.insert("route-exclude-address".into(), re.clone());
+                    }
                 }
             }
-            c_obj.insert("tun".into(), Value::Object(mini_tun));
+            c_obj.remove("tun");
         }
 
         // Apply effective ports based on proxyMode + tun.enable
@@ -363,14 +364,18 @@ pub async fn generate_profile(
                 }
             }
 
-            let tg_rule = json!(format!("GEOIP,telegram,{group_name},no-resolve"));
-            let tg_rule_plain = json!(format!("GEOIP,telegram,{group_name}"));
-            if !rules_arr.contains(&tg_rule) && !rules_arr.contains(&tg_rule_plain) {
-                let match_idx = rules_arr
-                    .iter()
-                    .position(|r| r.as_str().map(|s| s.starts_with("MATCH,")).unwrap_or(false))
-                    .unwrap_or(rules_arr.len());
-                rules_arr.insert(match_idx, tg_rule);
+            let tg_site = json!(format!("GEOSITE,telegram,{group_name}"));
+            let tg_ip = json!(format!("GEOIP,telegram,{group_name},no-resolve"));
+            let discord_site = json!(format!("GEOSITE,discord,{group_name}"));
+
+            for rule in [tg_site, tg_ip, discord_site] {
+                if !rules_arr.contains(&rule) {
+                    let match_idx = rules_arr
+                        .iter()
+                        .position(|r| r.as_str().map(|s| s.starts_with("MATCH,")).unwrap_or(false))
+                        .unwrap_or(rules_arr.len());
+                    rules_arr.insert(match_idx, rule);
+                }
             }
         }
     }

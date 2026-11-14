@@ -213,11 +213,15 @@ pub async fn check_tun_status() -> TunStatus {
     if let Ok(interfaces) = NetworkInterface::show() {
         for iface in interfaces {
             let name_low = iface.name.to_ascii_lowercase();
-            let is_tun_device = name_low.contains("mihomo")
+            let is_tun_device = name_low.contains("meta")
+                || name_low.contains("mihomo")
                 || name_low.contains("wintun")
                 || name_low.contains("nullex");
             let has_fake_ip = iface.addr.iter().any(|addr| match addr {
-                Addr::V4(v4) => v4.ip.to_string().starts_with("198.18."),
+                Addr::V4(v4) => {
+                    let s = v4.ip.to_string();
+                    s.starts_with("198.18.") || s.starts_with("172.19.")
+                }
                 _ => false,
             });
 
@@ -348,11 +352,15 @@ pub async fn run_tun_diagnostics(_state: &Arc<AppState>) -> Value {
     if let Ok(interfaces) = NetworkInterface::show() {
         for iface in interfaces {
             let name_low = iface.name.to_ascii_lowercase();
-            let is_tun = name_low.contains("mihomo")
+            let is_tun = name_low.contains("meta")
+                || name_low.contains("mihomo")
                 || name_low.contains("wintun")
                 || name_low.contains("nullex")
                 || iface.addr.iter().any(|a| match a {
-                    Addr::V4(v4) => v4.ip.to_string().starts_with("198.18."),
+                    Addr::V4(v4) => {
+                        let s = v4.ip.to_string();
+                        s.starts_with("198.18.") || s.starts_with("172.19.")
+                    }
                     _ => false,
                 });
             if is_tun {
