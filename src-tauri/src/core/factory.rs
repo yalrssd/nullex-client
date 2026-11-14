@@ -188,6 +188,29 @@ fn clean_runtime_profile(val: &mut Value) {
             obj.remove(key);
         }
     }
+
+    // Normalize global-client-fingerprint if present
+    if let Some(gfp) = obj.get_mut("global-client-fingerprint") {
+        if let Some(s) = gfp.as_str() {
+            let normalized = crate::utils::sub_converter::normalize_client_fingerprint(s);
+            *gfp = json!(normalized);
+        }
+    }
+
+    // Normalize client-fingerprint on all proxies in 'proxies' array
+    if let Some(proxies) = obj.get_mut("proxies").and_then(Value::as_array_mut) {
+        for proxy in proxies {
+            if let Some(p_obj) = proxy.as_object_mut() {
+                if let Some(fp_val) = p_obj.get_mut("client-fingerprint") {
+                    if let Some(s) = fp_val.as_str() {
+                        let normalized =
+                            crate::utils::sub_converter::normalize_client_fingerprint(s);
+                        *fp_val = json!(normalized);
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub async fn generate_profile(

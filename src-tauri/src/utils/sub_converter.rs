@@ -25,6 +25,35 @@ const SHARE_PREFIXES: [&str; 7] = [
     "tuic://",
 ];
 
+/// Normalize client fingerprints for Mihomo / uTLS.
+/// Mihomo only accepts: chrome, firefox, safari, ios, android, edge, 360, qq, random.
+/// Raw uTLS strings like hellochrome_120, HelloChrome_120, hellofirefox_* must be mapped.
+pub fn normalize_client_fingerprint(fp: &str) -> &'static str {
+    let lower = fp.to_ascii_lowercase();
+    let trimmed = lower.trim();
+    if trimmed.contains("chrome") {
+        "chrome"
+    } else if trimmed.contains("firefox") {
+        "firefox"
+    } else if trimmed.contains("safari") {
+        "safari"
+    } else if trimmed.contains("ios") {
+        "ios"
+    } else if trimmed.contains("android") {
+        "android"
+    } else if trimmed.contains("edge") {
+        "edge"
+    } else if trimmed.contains("360") {
+        "360"
+    } else if trimmed.contains("qq") {
+        "qq"
+    } else if trimmed == "random" {
+        "random"
+    } else {
+        "chrome"
+    }
+}
+
 pub fn is_share_link_input(input: &str) -> bool {
     let first_line = input
         .trim()
@@ -296,7 +325,7 @@ fn parse_vless_uri(raw: &str, used_names: &mut HashSet<String>) -> Option<Value>
             proxy.insert("servername".into(), json!(s));
         }
         if let Some(f) = fp.filter(|s| !s.is_empty()) {
-            proxy.insert("client-fingerprint".into(), json!(f));
+            proxy.insert("client-fingerprint".into(), json!(normalize_client_fingerprint(f)));
         } else if security == "reality" {
             proxy.insert("client-fingerprint".into(), json!("chrome"));
         }
@@ -426,7 +455,7 @@ fn parse_trojan_uri(raw: &str, used_names: &mut HashSet<String>) -> Option<Value
         proxy.insert("alpn".into(), json!(a));
     }
     if let Some(f) = get("fp").or_else(|| get("fingerprint")).filter(|s| !s.is_empty()) {
-        proxy.insert("client-fingerprint".into(), json!(f));
+        proxy.insert("client-fingerprint".into(), json!(normalize_client_fingerprint(f)));
     }
     if let Some(pbk) = get("pbk").filter(|s| !s.is_empty()) {
         let mut r = Map::new();
@@ -551,7 +580,7 @@ fn parse_vmess_uri(raw: &str, used_names: &mut HashSet<String>) -> Option<Value>
             proxy.insert("servername".into(), json!(s));
         }
         if let Some(f) = get("fp").filter(|s| !s.is_empty()) {
-            proxy.insert("client-fingerprint".into(), json!(f));
+            proxy.insert("client-fingerprint".into(), json!(normalize_client_fingerprint(f)));
         }
     }
     Some(Value::Object(proxy))
@@ -916,7 +945,8 @@ fn convert_xray_or_singbox_json(raw_json: &str) -> Option<ConvertedSubscriptionR
                             proxy.insert("alpn".into(), alpn.clone());
                         }
                         if let Some(fp) = utls.and_then(|u| u.get("fingerprint")) {
-                            proxy.insert("client-fingerprint".into(), fp.clone());
+                            let fp_str = value_as_str(Some(fp)).unwrap_or_else(|| "chrome".to_string());
+                            proxy.insert("client-fingerprint".into(), json!(normalize_client_fingerprint(&fp_str)));
                         }
                         if let Some(r_obj) = reality {
                             if r_obj.get("enabled").and_then(Value::as_bool) == Some(true) {
@@ -1027,7 +1057,8 @@ fn convert_xray_or_singbox_json(raw_json: &str) -> Option<ConvertedSubscriptionR
                             .and_then(|r| r.get("fingerprint"))
                             .or_else(|| tls.and_then(|t| t.get("fingerprint")))
                         {
-                            proxy.insert("client-fingerprint".into(), fp.clone());
+                            let fp_str = value_as_str(Some(fp)).unwrap_or_else(|| "chrome".to_string());
+                            proxy.insert("client-fingerprint".into(), json!(normalize_client_fingerprint(&fp_str)));
                         } else if sec == "reality" {
                             proxy.insert("client-fingerprint".into(), json!("chrome"));
                         }
@@ -1292,5 +1323,21 @@ mod tests {
     #[test]
     fn rejects_html() {
         assert!(normalize_subscription_to_mihomo_yaml("<!DOCTYPE html><html></html>").is_none());
+    }
+
+    #[test]
+    fn normalizes_client_fingerprints() {
+        assert_eq!(normalize_client_fingerprint("hellochrome_120"), "chrome");
+        assert_eq!(normalize_client_fingerprint("HelloChrome_120"), "chrome");
+        assert_eq!(normalize_client_fingerprint("chrome"), "chrome");
+        assert_eq!(normalize_client_fingerprint("hellofirefox_115"), "firefox");
+        assert_eq!(normalize_client_fingerprint("safari_16_0"), "safari");
+        assert_eq!(normalize_client_fingerprint("ios"), "ios");
+        assert_eq!(normalize_client_fingerprint("android"), "android");
+        assert_eq!(normalize_client_fingerprint("edge_99"), "edge");
+        assert_eq!(normalize_client_fingerprint("360"), "360");
+        assert_eq!(normalize_client_fingerprint("qq"), "qq");
+        assert_eq!(normalize_client_fingerprint("random"), "random");
+        assert_eq!(normalize_client_fingerprint("unknown_fp_xyz"), "chrome");
     }
 }
