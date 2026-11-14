@@ -53,8 +53,8 @@
 
 ### 1. Скачивание
 Загрузите актуальную версию со страницы [GitHub Releases](https://github.com/yalrssd/nullex-client/releases/latest):
-* **Установщик (`Nullex_1.1.0_x64-setup.exe`)**: Рекомендуется для обычной установки с ярлыком на рабочем столе и поддержкой автообновлений.
-* **Портативная версия (`Nullex_x64-portable.7z`)**: Распакуйте архив и запускайте `Nullex.exe` без установки.
+* **Установщик (`Nullex_1.1.0_x64-setup.exe` / `Nullex_1.1.0_arm64-setup.exe`)**: Рекомендуется для обычной установки с ярлыком на рабочем столе и поддержкой автообновлений.
+* **Портативная версия (`Nullex_x64-portable.7z` / `Nullex_arm64-portable.7z`)**: Распакуйте архив и запускайте `Nullex.exe` без установки.
 
 ### 2. Добавление подписки
 1. Запустите **Nullex**.
@@ -78,12 +78,14 @@
 |---|---|---|---|
 | `Nullex_1.1.0_x64-setup.exe` | **NSIS Installer** | Windows x64 | Стандартный установщик с автообновлением. |
 | `Nullex_x64-portable.7z` | **7z Архив** | Windows x64 | Портативная версия, не требует установки. |
+| `Nullex_1.1.0_arm64-setup.exe` | **NSIS Installer** | Windows ARM64 | Нативный установщик для Snapdragon и ARM64 устройств. |
+| `Nullex_arm64-portable.7z` | **7z Архив** | Windows ARM64 | Нативная портативная версия для ARM64. |
 
 ### Системные требования
 
-* **ОС:** Windows 10 (1809+) / Windows 11 (64-бит)
+* **ОС:** Windows 10 (1809+) / Windows 11
 * **Рантайм:** Microsoft Edge WebView2 (встроен в Windows 10/11)
-* **Архитектура:** x86_64
+* **Архитектура:** x86_64 (Intel/AMD) или aarch64 (ARM64 Snapdragon)
 
 ---
 

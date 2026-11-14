@@ -78,12 +78,14 @@ Download the latest version from [GitHub Releases](https://github.com/yalrssd/nu
 |---|---|---|---|
 | `Nullex_1.1.0_x64-setup.exe` | **NSIS Installer** | Windows x64 | Standard installer with automatic upgrade support. |
 | `Nullex_x64-portable.7z` | **Portable Archive** | Windows x64 | Self-contained portable edition, zero installation required. |
+| `Nullex_1.1.0_arm64-setup.exe` | **NSIS Installer** | Windows ARM64 | Native ARM64 installer for Snapdragon & Windows on ARM devices. |
+| `Nullex_arm64-portable.7z` | **Portable Archive** | Windows ARM64 | Native ARM64 portable edition, zero installation required. |
 
 ### System Requirements
 
-- **Operating System:** Windows 10 (1809+) / Windows 11 (64-bit)
+- **Operating System:** Windows 10 (1809+) / Windows 11
 - **Web Runtime:** Native Microsoft Edge WebView2 (preinstalled on Windows 10/11)
-- **Architecture:** x86_64
+- **Architecture:** x86_64 (Intel/AMD) or aarch64 (ARM64 Snapdragon)
 
 ---
 
