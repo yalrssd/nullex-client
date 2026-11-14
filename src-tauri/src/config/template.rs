@@ -32,7 +32,8 @@ pub fn default_app_config() -> Value {
         "autoLightweightMode": "core",
         "mainSwitchMode": "tun",
         "useHotReloadProfile": true,
-        "delayTestMode": "url"
+        "delayTestMode": "url",
+        "blockQuic": true
     })
 }
 
@@ -95,16 +96,27 @@ pub fn default_controled_mihomo_config() -> Value {
         },
         "dns": {
             "enable": true,
-            "ipv6": true,
+            "ipv6": false,
             "respect-rules": false,
             "enhanced-mode": "fake-ip",
             "fake-ip-range": "198.18.0.1/16",
-            "fake-ip-filter": ["*", "+.lan", "+.local", "time.*.com", "ntp.*.com", "+.market.xiaomi.com"],
+            "fake-ip-filter": [
+                "+.lan",
+                "+.local",
+                "time.*.com",
+                "ntp.*.com",
+                "+.time.apple.com",
+                "time1.*.com",
+                "time2.*.com",
+                "*.msftconnecttest.com",
+                "*.msftncsi.com",
+                "+.market.xiaomi.com"
+            ],
             "use-hosts": false,
             "use-system-hosts": false,
-            "default-nameserver": ["tls://1.1.1.1"],
-            "nameserver": ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"],
-            "proxy-server-nameserver": [],
+            "default-nameserver": ["1.1.1.1", "8.8.8.8"],
+            "nameserver": ["https://dns.google/dns-query", "https://cloudflare-dns.com/dns-query"],
+            "proxy-server-nameserver": ["1.1.1.1", "8.8.8.8"],
             "direct-nameserver": []
         },
         "sniffer": {
@@ -114,11 +126,14 @@ pub fn default_controled_mihomo_config() -> Value {
             "override-destination": false,
             "sniff": {
                 "HTTP": {
-                    "ports": [80, 443],
+                    "ports": [80, 8080, 8880],
                     "override-destination": false
                 },
                 "TLS": {
-                    "ports": [443]
+                    "ports": [443, 8443]
+                },
+                "QUIC": {
+                    "ports": [443, 8443]
                 }
             },
             "skip-domain": ["+.push.apple.com"],

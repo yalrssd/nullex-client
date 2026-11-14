@@ -339,6 +339,42 @@ pub async fn generate_profile(
         );
     }
 
+    // Apply QUIC blocking rule and Telegram routing rule
+    let block_quic = app_cfg
+        .get("blockQuic")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    if let Some(p_obj) = profile.as_object_mut() {
+        let group_name = p_obj
+            .get("proxy-groups")
+            .and_then(Value::as_array)
+            .and_then(|arr| arr.first())
+            .and_then(|g| g.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or("Proxy")
+            .to_string();
+
+        if let Some(rules_arr) = p_obj.get_mut("rules").and_then(Value::as_array_mut) {
+            if block_quic {
+                let quic_rule = json!("AND,((NETWORK,UDP),(DST-PORT,443)),REJECT");
+                if !rules_arr.contains(&quic_rule) {
+                    rules_arr.insert(0, quic_rule);
+                }
+            }
+
+            let tg_rule = json!(format!("GEOIP,telegram,{group_name},no-resolve"));
+            let tg_rule_plain = json!(format!("GEOIP,telegram,{group_name}"));
+            if !rules_arr.contains(&tg_rule) && !rules_arr.contains(&tg_rule_plain) {
+                let match_idx = rules_arr
+                    .iter()
+                    .position(|r| r.as_str().map(|s| s.starts_with("MATCH,")).unwrap_or(false))
+                    .unwrap_or(rules_arr.len());
+                rules_arr.insert(match_idx, tg_rule);
+            }
+        }
+    }
+
     clean_runtime_profile(&mut profile);
 
     let yaml = stringify_json_to_yaml(&profile)?;
