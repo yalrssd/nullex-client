@@ -170,7 +170,8 @@ pub fn get_mihomo_processes() -> Vec<Value> {
                             CloseHandle(ph);
                         }
                         let is_ours = !our_sidecar.is_empty()
-                            && exe_path_str.to_ascii_lowercase() == our_sidecar;
+                            && (exe_path_str.to_ascii_lowercase() == our_sidecar
+                                || exe_path_str.to_ascii_lowercase().ends_with(r"\resources\sidecar\mihomo.exe"));
                         list.push(json!({
                             "pid": pid,
                             "path": exe_path_str,
@@ -399,7 +400,8 @@ pub async fn run_tun_diagnostics(_state: &Arc<AppState>) -> Value {
     summary.push_str(&format!("TUN Virtual Adapter: {}\n", if tun_adapter_found { "ACTIVE" } else { "NOT FOUND" }));
     summary.push_str(&format!("Running mihomo.exe count: {}\n", mihomo_procs.len()));
     for p in &mihomo_procs {
-        summary.push_str(&format!("  - PID {}: {} (Nullex: {})\n", p["pid"], p["path"], p["isNullex"]));
+        let p_path = p["path"].as_str().unwrap_or("");
+        summary.push_str(&format!("  - PID {}: {} (Nullex: {})\n", p["pid"], p_path, p["isNullex"]));
     }
     if !windivert_procs.is_empty() {
         summary.push_str(&format!("WARNING: WinDivert / Zapret detected: {}\n", windivert_procs.join(", ")));

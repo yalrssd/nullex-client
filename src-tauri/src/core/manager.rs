@@ -168,7 +168,7 @@ pub async fn kill_orphan_cores(state: &Arc<AppState>) {
                                 let full_path = OsString::from_wide(&buf[..sz as usize])
                                     .to_string_lossy()
                                     .to_ascii_lowercase();
-                                if full_path == our_sidecar {
+                                if full_path == our_sidecar || full_path.ends_with(r"\resources\sidecar\mihomo.exe") {
                                     TerminateProcess(ph, 1);
                                     pids.push(pid);
                                 }
