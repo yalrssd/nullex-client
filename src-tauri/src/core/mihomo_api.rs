@@ -44,11 +44,11 @@ async fn mihomo_req(
 }
 
 pub async fn mihomo_version() -> Result<Value, String> {
-    mihomo_req(Method::GET, "/version", None, 5).await
+    mihomo_req(Method::GET, "/version", None, 10).await
 }
 
 pub async fn mihomo_config() -> Result<Value, String> {
-    mihomo_req(Method::GET, "/configs", None, 5).await
+    mihomo_req(Method::GET, "/configs", None, 10).await
 }
 
 pub async fn patch_mihomo_config(patch: Value) -> Result<(), String> {
@@ -78,11 +78,25 @@ pub async fn mihomo_hot_reload_config(
     app_handle: Option<&AppHandle>,
 ) -> Result<(), String> {
     let configured_log_level = generate_profile(state, app_handle).await?;
-    let payload = state.runtime_config_str.read().await.clone();
+    let app_cfg = get_app_config(state, false).await.unwrap_or_default();
+    let diff_work_dir = app_cfg
+        .get("diffWorkDir")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let prof_cfg = crate::config::profile::get_profile_config(state, false)
+        .await
+        .unwrap_or_default();
+    let cur = prof_cfg.get("current").and_then(Value::as_str);
+    let cfg_path = crate::utils::dirs::mihomo_work_config_path(if diff_work_dir {
+        cur
+    } else {
+        Some("work")
+    });
+
     let _ = mihomo_req(
         Method::PUT,
         "/configs?force=true",
-        Some(json!({ "path": "", "payload": payload })),
+        Some(json!({ "path": cfg_path.to_string_lossy().to_string() })),
         15,
     )
     .await?;
@@ -579,16 +593,6 @@ pub async fn start_mihomo_streams(
         .await;
     });
 
-    let app_m = app_handle.clone();
-    let memory_task = tokio::spawn(async move {
-        run_ws_loop("/memory".to_string(), move |txt| {
-            if let Ok(val) = serde_json::from_str::<Value>(txt) {
-                let _ = app_m.emit("ipc-mihomoMemory", json!([val]));
-            }
-        })
-        .await;
-    });
-
     let conn_abort = {
         let handles = state.streams.lock().await;
         if handles.connections_wanted {
@@ -602,7 +606,7 @@ pub async fn start_mihomo_streams(
 
     let mut handles = state.streams.lock().await;
     handles.traffic_abort = Some(traffic_task.abort_handle());
-    handles.memory_abort = Some(memory_task.abort_handle());
+    handles.memory_abort = None;
     if let Some(ca) = conn_abort {
         handles.connections_abort = Some(ca);
     }

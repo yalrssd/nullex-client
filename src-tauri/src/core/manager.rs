@@ -608,9 +608,9 @@ fn start_core_locked<'a>(
                     }
                 }
                 if !notified
-                    && (line.contains("RESTful API")
-                        || line.contains("Start initial")
-                        || low.contains("listening at"))
+                    && (line.contains("RESTful API pipe listening at")
+                        || line.contains("RESTful API unix listening at")
+                        || line.contains("RESTful API listening at"))
                 {
                     notified = true;
                     rn.notify_one();
@@ -689,10 +689,8 @@ fn start_core_locked<'a>(
         return Err("Core failed to stay alive".to_string());
     }
 
-    // Monitor unexpected exit & auto-restart up to 3 times unless stopped
+    // Monitor unexpected exit & auto-restart up to 10 times unless stopped (matches Nullex retry=10)
     spawn_exit_watcher(state.clone(), app_handle.cloned(), pid);
-    // Monitor pipe health: auto-restart if core stops responding
-    spawn_pipe_watchdog(state.clone(), app_handle.cloned(), pid);
 
     on_core_ready(state, app_handle, configured_log_level).await;
     Ok(())
@@ -744,63 +742,6 @@ async fn on_core_ready(
     }
 }
 
-/// Watchdog: pings the mihomo pipe every 20s.
-/// If 3 consecutive pings fail or time out while the process is still running
-/// (zombie / stuck state), cleanly auto-restarts the core.
-fn spawn_pipe_watchdog(state: Arc<AppState>, app_handle: Option<AppHandle>, watched_pid: u32) {
-    tokio::spawn(async move {
-        let mut fail_count = 0u32;
-        loop {
-            tokio::time::sleep(Duration::from_secs(20)).await;
-
-            if state.is_quitting.load(Ordering::SeqCst)
-                || state.core_pid.load(Ordering::SeqCst) != watched_pid
-            {
-                return;
-            }
-
-            let status_ok = {
-                let s = state.core_state.read().await;
-                s.status == "running"
-            };
-            if !status_ok {
-                return;
-            }
-
-            let ping_res = tokio::time::timeout(Duration::from_secs(3), mihomo_version()).await;
-            match ping_res {
-                Ok(Ok(_)) => {
-                    fail_count = 0;
-                }
-                _ => {
-                    fail_count += 1;
-                    let _ = append_core_log_line(&format!(
-                        "[Watchdog] Pipe health check failed ({fail_count}/3)"
-                    ))
-                    .await;
-
-                    if fail_count >= 3 {
-                        if state.core_pid.load(Ordering::SeqCst) != watched_pid
-                            || state.is_quitting.load(Ordering::SeqCst)
-                        {
-                            return;
-                        }
-                        let _ = append_core_log_line(
-                            "[Watchdog] Core unresponsive — triggering auto-restart",
-                        )
-                        .await;
-                        if let Some(ref handle) = app_handle {
-                            let _ = handle.emit("ipc-core-restarting", json!({}));
-                        }
-                        let _ = restart_core(&state, app_handle.as_ref()).await;
-                        return;
-                    }
-                }
-            }
-        }
-    });
-}
-
 fn spawn_exit_watcher(state: Arc<AppState>, app_handle: Option<AppHandle>, watched_pid: u32) {
     tokio::spawn(async move {
         loop {
@@ -831,14 +772,14 @@ fn spawn_exit_watcher(state: Arc<AppState>, app_handle: Option<AppHandle>, watch
                     return;
                 }
                 let prev = state.core_retry.fetch_add(1, Ordering::SeqCst);
-                if prev < 3 {
+                if prev < 10 {
                     let _ = append_core_log_line(&format!(
-                        "Mihomo exited unexpectedly, auto-restarting ({}/3)...",
+                        "Mihomo exited unexpectedly, auto-restarting ({}/10)...",
                         prev + 1
                     ))
                     .await;
                     tokio::time::sleep(Duration::from_millis(500)).await;
-                    let _ = start_core_locked(&state, app_handle.as_ref()).await;
+                    let _ = restart_core(&state, app_handle.as_ref()).await;
                 } else {
                     state.core_pid.store(0, Ordering::SeqCst);
                     set_core_state(
@@ -847,7 +788,7 @@ fn spawn_exit_watcher(state: Arc<AppState>, app_handle: Option<AppHandle>, watch
                         "error",
                         Some(CoreErrorPayload {
                             reason: "unexpected_exit".into(),
-                            message: "Mihomo exited repeatedly".into(),
+                            message: "Mihomo exited repeatedly (10 retries exceeded)".into(),
                         }),
                     )
                     .await;

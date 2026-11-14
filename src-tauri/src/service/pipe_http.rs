@@ -6,6 +6,8 @@ use hyper_util::rt::TokioIo;
 use serde_json::Value;
 use std::time::Duration;
 
+static PIPE_MUTEX: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+
 #[cfg(windows)]
 pub async fn open_named_pipe(pipe_path: &str) -> Result<tokio::net::windows::named_pipe::NamedPipeClient, String> {
     use tokio::net::windows::named_pipe::ClientOptions;
@@ -14,11 +16,22 @@ pub async fn open_named_pipe(pipe_path: &str) -> Result<tokio::net::windows::nam
     loop {
         match ClientOptions::new().open(pipe_path) {
             Ok(client) => return Ok(client),
-            Err(e) if (e.raw_os_error() == Some(231) || e.raw_os_error() == Some(536)) && attempts < 40 => {
-                attempts += 1;
-                tokio::time::sleep(Duration::from_millis(50)).await;
+            Err(e) => {
+                let code = e.raw_os_error();
+                // 2 = ERROR_FILE_NOT_FOUND (pipe not yet created / restarting)
+                // 109 = ERROR_BROKEN_PIPE (pipe ended)
+                // 231 = ERROR_PIPE_BUSY (all instances busy)
+                // 232 = ERROR_NO_DATA (pipe closing)
+                // 233 = ERROR_PIPE_NOT_CONNECTED (not connected yet)
+                // 536 = ERROR_PIPE_LISTENING (pipe in listening state)
+                let is_transient = matches!(code, Some(2 | 109 | 231 | 232 | 233 | 536));
+                if is_transient && attempts < 60 {
+                    attempts += 1;
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    continue;
+                }
+                return Err(format!("Pipe open failed ({pipe_path}, os_error={:?}): {e}", code));
             }
-            Err(e) => return Err(format!("Pipe open failed ({pipe_path}, os_error={:?}): {e}", e.raw_os_error())),
         }
     }
 }
@@ -59,6 +72,11 @@ pub async fn pipe_request(
     extra_headers: &[(&str, String)],
     timeout_secs: u64,
 ) -> Result<Value, PipeHttpError> {
+    let _lock = PIPE_MUTEX
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await;
+
     let fut = async {
         #[cfg(windows)]
         let stream = open_named_pipe(pipe_path)
