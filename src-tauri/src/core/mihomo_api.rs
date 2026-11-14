@@ -494,29 +494,67 @@ where
     let url = format!("ws://localhost{ws_path}");
     let mut backoff_ms = 200u64;
     loop {
-        match open_mihomo_stream().await {
-            Ok(stream) => match client_async(&url, stream).await {
-                Ok((mut ws, _)) => {
-                    backoff_ms = 200;
-                    while let Some(msg) = ws.next().await {
-                        match msg {
-                            Ok(Message::Text(txt)) => on_text(&txt),
-                            Ok(Message::Binary(bin)) => {
-                                if let Ok(s) = std::str::from_utf8(&bin) {
-                                    on_text(s);
+        let stream_res = tokio::time::timeout(Duration::from_secs(3), open_mihomo_stream()).await;
+        match stream_res {
+            Ok(Ok(stream)) => {
+                let ws_res = tokio::time::timeout(Duration::from_secs(3), client_async(&url, stream)).await;
+                match ws_res {
+                    Ok(Ok((mut ws, _))) => {
+                        backoff_ms = 200;
+                        while let Some(msg) = ws.next().await {
+                            match msg {
+                                Ok(Message::Text(txt)) => on_text(&txt),
+                                Ok(Message::Binary(bin)) => {
+                                    if let Ok(s) = std::str::from_utf8(&bin) {
+                                        on_text(s);
+                                    }
                                 }
+                                Ok(Message::Close(_)) | Err(_) => break,
+                                _ => {}
                             }
-                            Ok(Message::Close(_)) | Err(_) => break,
-                            _ => {}
                         }
                     }
+                    _ => {}
                 }
-                Err(_) => {}
-            },
-            Err(_) => {}
+            }
+            _ => {}
         }
         tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
         backoff_ms = (backoff_ms * 2).min(2000);
+    }
+}
+
+fn spawn_connections_stream(app_handle: &AppHandle) -> tokio::task::AbortHandle {
+    let app_c = app_handle.clone();
+    let mut last_conn_emit = Instant::now() - Duration::from_millis(200);
+    let connections_task = tokio::spawn(async move {
+        run_ws_loop("/connections".to_string(), move |txt| {
+            if last_conn_emit.elapsed() < Duration::from_millis(100) {
+                return;
+            }
+            if let Ok(val) = serde_json::from_str::<Value>(txt) {
+                last_conn_emit = Instant::now();
+                let _ = app_c.emit("ipc-mihomoConnections", json!([val]));
+            }
+        })
+        .await;
+    });
+    connections_task.abort_handle()
+}
+
+pub async fn set_mihomo_connections_wanted(
+    state: &Arc<AppState>,
+    app_handle: &AppHandle,
+    wanted: bool,
+) {
+    let mut handles = state.streams.lock().await;
+    handles.connections_wanted = wanted;
+    if !wanted {
+        if let Some(a) = handles.connections_abort.take() {
+            a.abort();
+        }
+    } else if handles.connections_abort.is_none() {
+        handles.connections_abort = Some(spawn_connections_stream(app_handle));
     }
 }
 
@@ -551,27 +589,23 @@ pub async fn start_mihomo_streams(
         .await;
     });
 
-    let app_c = app_handle.clone();
-    let mut last_conn_emit = Instant::now() - Duration::from_millis(200);
-    let connections_task = tokio::spawn(async move {
-        run_ws_loop("/connections".to_string(), move |txt| {
-            if last_conn_emit.elapsed() < Duration::from_millis(100) {
-                return;
-            }
-            if let Ok(val) = serde_json::from_str::<Value>(txt) {
-                last_conn_emit = Instant::now();
-                let _ = app_c.emit("ipc-mihomoConnections", json!([val]));
-            }
-        })
-        .await;
-    });
+    let conn_abort = {
+        let handles = state.streams.lock().await;
+        if handles.connections_wanted {
+            Some(spawn_connections_stream(app_handle))
+        } else {
+            None
+        }
+    };
 
     let logs_task = spawn_logs_stream(app_handle, &log_level);
 
     let mut handles = state.streams.lock().await;
     handles.traffic_abort = Some(traffic_task.abort_handle());
     handles.memory_abort = Some(memory_task.abort_handle());
-    handles.connections_abort = Some(connections_task.abort_handle());
+    if let Some(ca) = conn_abort {
+        handles.connections_abort = Some(ca);
+    }
     handles.logs_abort = Some(logs_task);
     handles.logs_level = log_level;
 }
@@ -632,6 +666,11 @@ pub async fn stop_mihomo_streams(state: &Arc<AppState>) {
 }
 
 pub async fn restart_mihomo_connections(state: &Arc<AppState>, app_handle: &AppHandle) {
-    let lvl = get_effective_log_level(state).await;
-    start_mihomo_streams(state, app_handle, lvl).await;
+    let mut handles = state.streams.lock().await;
+    if let Some(a) = handles.connections_abort.take() {
+        a.abort();
+    }
+    if handles.connections_wanted {
+        handles.connections_abort = Some(spawn_connections_stream(app_handle));
+    }
 }

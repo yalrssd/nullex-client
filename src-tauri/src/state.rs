@@ -41,6 +41,7 @@ pub struct StreamHandles {
     pub memory_abort: Option<tokio::task::AbortHandle>,
     pub logs_abort: Option<tokio::task::AbortHandle>,
     pub connections_abort: Option<tokio::task::AbortHandle>,
+    pub connections_wanted: bool,
     pub logs_level: String,
 }
 
@@ -51,6 +52,7 @@ impl Default for StreamHandles {
             memory_abort: None,
             logs_abort: None,
             connections_abort: None,
+            connections_wanted: false,
             logs_level: "info".to_string(),
         }
     }

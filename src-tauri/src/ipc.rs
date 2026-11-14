@@ -21,7 +21,7 @@ use crate::core::mihomo_api::{
     mihomo_proxy_delay, mihomo_proxy_providers, mihomo_rule_providers, mihomo_rules,
     mihomo_unfixed_proxy, mihomo_update_proxy_providers, mihomo_update_rule_providers,
     mihomo_upgrade, mihomo_upgrade_geo, mihomo_upgrade_ui, mihomo_version, patch_mihomo_config,
-    restart_mihomo_connections,
+    restart_mihomo_connections, set_mihomo_connections_wanted,
 };
 use crate::desktop::floating::{close_floating_window, show_context_menu, show_floating_window};
 use crate::desktop::shortcuts::{register_shortcut, trigger_main_window};
@@ -174,6 +174,11 @@ pub async fn ipc_invoke(
         }
         "restartMihomoConnections" => {
             restart_mihomo_connections(st, &app_handle).await;
+            Ok(Value::Null)
+        }
+        "setMihomoConnectionsWanted" => {
+            let wanted = args.first().and_then(Value::as_bool).unwrap_or(false);
+            set_mihomo_connections_wanted(st, &app_handle, wanted).await;
             Ok(Value::Null)
         }
         "mihomoUpgrade" => {

@@ -14,11 +14,11 @@ pub async fn open_named_pipe(pipe_path: &str) -> Result<tokio::net::windows::nam
     loop {
         match ClientOptions::new().open(pipe_path) {
             Ok(client) => return Ok(client),
-            Err(e) if e.raw_os_error() == Some(231) && attempts < 20 => {
+            Err(e) if (e.raw_os_error() == Some(231) || e.raw_os_error() == Some(536)) && attempts < 40 => {
                 attempts += 1;
-                tokio::time::sleep(Duration::from_millis(25)).await;
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            Err(e) => return Err(format!("Pipe open failed ({pipe_path}): {e}")),
+            Err(e) => return Err(format!("Pipe open failed ({pipe_path}, os_error={:?}): {e}", e.raw_os_error())),
         }
     }
 }
@@ -74,9 +74,17 @@ pub async fn pipe_request(
             .await
             .map_err(|e| PipeHttpError::Other(format!("HTTP handshake failed: {e}")))?;
 
-        tokio::spawn(async move {
+        // Driver task with guaranteed abort guard so pipe handle is closed immediately on finish/timeout
+        let conn_task = tokio::spawn(async move {
             let _ = conn.await;
         });
+        struct ConnGuard(tokio::task::JoinHandle<()>);
+        impl Drop for ConnGuard {
+            fn drop(&mut self) {
+                self.0.abort();
+            }
+        }
+        let _guard = ConnGuard(conn_task);
 
         let payload_bytes = match body {
             Some(v) => Bytes::from(v.to_string()),
@@ -86,7 +94,8 @@ pub async fn pipe_request(
         let mut builder = Request::builder()
             .method(method)
             .uri(uri_path)
-            .header("Host", "localhost");
+            .header("Host", "localhost")
+            .header("Connection", "close");
 
         if !payload_bytes.is_empty() {
             builder = builder.header("Content-Type", "application/json");

@@ -1,6 +1,6 @@
 import BasePage from '@renderer/components/base/base-page'
 import { mihomoCloseAllConnections, mihomoCloseConnection } from '@renderer/utils/ipc'
-import { useConnectionsStore } from '@renderer/store/connections-store'
+import { useConnectionsStore, useConnectionsStream } from '@renderer/store/connections-store'
 import React, { useCallback, useMemo, useState } from 'react'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
@@ -56,6 +56,7 @@ import {
 } from 'lucide-react'
 
 const Connections: React.FC = () => {
+  useConnectionsStream()
   const { t } = useTranslation()
   const { controledMihomoConfig } = useControledMihomoConfig()
   const { 'find-process-mode': findProcessMode = 'always' } = controledMihomoConfig || {}

@@ -350,6 +350,9 @@ async fn stop_core_inner(state: &Arc<AppState>, app_handle: Option<&AppHandle>) 
         }
     }
 
+    // Allow Windows OS to fully dismantle the named pipe and network adapter handles
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
     set_core_state(state, app_handle, "stopped", None).await;
 }
 
@@ -591,7 +594,14 @@ fn start_core_locked<'a>(
             while let Ok(Some(line)) = lines.next_line().await {
                 append_core_log_line(&line).await;
                 let low = line.to_ascii_lowercase();
-                if low.contains("level=fatal") || low.contains("level=error") && !notified {
+                if (low.contains("controller pipe listen error") || low.contains("level=fatal")) && !notified {
+                    let mut guard = fe.lock().await;
+                    if guard.is_none() {
+                        *guard = Some(line.clone());
+                    }
+                    notified = true;
+                    rn.notify_one();
+                } else if low.contains("level=error") && !notified {
                     let mut guard = fe.lock().await;
                     if guard.is_none() {
                         *guard = Some(line.clone());
@@ -734,14 +744,14 @@ async fn on_core_ready(
     }
 }
 
-/// Watchdog: pings the mihomo pipe every 30s.
-/// If 3 consecutive pings fail while the process is still running
-/// (zombie / stuck state), auto-restarts the core silently.
+/// Watchdog: pings the mihomo pipe every 20s.
+/// If 3 consecutive pings fail or time out while the process is still running
+/// (zombie / stuck state), cleanly auto-restarts the core.
 fn spawn_pipe_watchdog(state: Arc<AppState>, app_handle: Option<AppHandle>, watched_pid: u32) {
     tokio::spawn(async move {
         let mut fail_count = 0u32;
         loop {
-            tokio::time::sleep(Duration::from_secs(30)).await;
+            tokio::time::sleep(Duration::from_secs(20)).await;
 
             if state.is_quitting.load(Ordering::SeqCst)
                 || state.core_pid.load(Ordering::SeqCst) != watched_pid
@@ -757,11 +767,12 @@ fn spawn_pipe_watchdog(state: Arc<AppState>, app_handle: Option<AppHandle>, watc
                 return;
             }
 
-            match mihomo_version().await {
-                Ok(_) => {
+            let ping_res = tokio::time::timeout(Duration::from_secs(3), mihomo_version()).await;
+            match ping_res {
+                Ok(Ok(_)) => {
                     fail_count = 0;
                 }
-                Err(_) => {
+                _ => {
                     fail_count += 1;
                     let _ = append_core_log_line(&format!(
                         "[Watchdog] Pipe health check failed ({fail_count}/3)"
@@ -781,7 +792,7 @@ fn spawn_pipe_watchdog(state: Arc<AppState>, app_handle: Option<AppHandle>, watc
                         if let Some(ref handle) = app_handle {
                             let _ = handle.emit("ipc-core-restarting", json!({}));
                         }
-                        let _ = start_core_locked(&state, app_handle.as_ref()).await;
+                        let _ = restart_core(&state, app_handle.as_ref()).await;
                         return;
                     }
                 }

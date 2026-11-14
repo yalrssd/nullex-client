@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { useEffect } from 'react'
+import { setMihomoConnectionsWanted } from '@renderer/utils/ipc'
 
 export interface ConnectionsInfo {
   uploadTotal: number
@@ -95,6 +97,29 @@ const handleIpcPayload = (payload: ControllerConnections): void => {
 
 let attached = false
 let ipcListener: ((event: unknown, payload: ControllerConnections) => void) | null = null
+
+let streaming = false
+
+const setStreaming = (next: boolean): void => {
+  if (next && !streaming) {
+    previousActiveMap = new Map()
+  }
+  streaming = next
+  setMihomoConnectionsWanted(next).catch(() => {})
+}
+
+// Streams connections only while the connections page is mounted and the window is visible.
+export const useConnectionsStream = (): void => {
+  useEffect(() => {
+    const sync = (): void => setStreaming(document.visibilityState === 'visible')
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return (): void => {
+      document.removeEventListener('visibilitychange', sync)
+      setStreaming(false)
+    }
+  }, [])
+}
 
 export const attachConnectionsStore = (): (() => void) => {
   if (attached) {

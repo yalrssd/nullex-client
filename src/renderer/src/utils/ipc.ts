@@ -233,6 +233,12 @@ export async function restartMihomoConnections(): Promise<void> {
   return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('restartMihomoConnections'))
 }
 
+export async function setMihomoConnectionsWanted(wanted: boolean): Promise<void> {
+  return ipcErrorWrapper(
+    await window.electron.ipcRenderer.invoke('setMihomoConnectionsWanted', wanted)
+  )
+}
+
 export async function triggerSysProxy(enable: boolean, onlyActiveDevice: boolean): Promise<void> {
   return ipcErrorWrapper(
     await window.electron.ipcRenderer.invoke('triggerSysProxy', enable, onlyActiveDevice)
