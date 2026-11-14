@@ -281,7 +281,50 @@ async fn bootstrap_app(state: Arc<AppState>, app_handle: AppHandle) {
     }
 }
 
+pub fn parse_wait_pid_from_args<I, S>(args: I) -> Option<u32>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    for arg in args {
+        let s = arg.as_ref();
+        if let Some(rest) = s.strip_prefix("--wait-pid=") {
+            if let Ok(pid) = rest.parse::<u32>() {
+                return Some(pid);
+            }
+        }
+    }
+    None
+}
+
 pub fn run() {
+    // ── --wait-pid=<PID> ──────────────────────────────────────────────────────
+    // When we restart as admin, the new elevated process receives this flag.
+    // We open the old process by PID and wait up to 15 s for it to exit so
+    // that tauri_plugin_single_instance no longer sees an existing instance.
+    // This block runs BEFORE Tauri builder registration.
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, TerminateProcess, WaitForSingleObject,
+            PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+        };
+        if let Some(pid) = parse_wait_pid_from_args(std::env::args()) {
+            unsafe {
+                let h = OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_TERMINATE, 0, pid);
+                if !h.is_null() {
+                    let wait_result = WaitForSingleObject(h, 15_000);
+                    if wait_result == WAIT_TIMEOUT {
+                        // Old process still alive after 15 s — force kill
+                        let _ = TerminateProcess(h, 1);
+                    }
+                    CloseHandle(h);
+                }
+            }
+        }
+    }
+
     let app_state = Arc::new(AppState::default());
 
     let state_setup = app_state.clone();
@@ -384,4 +427,33 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_wait_pid_correctly() {
+        assert_eq!(
+            parse_wait_pid_from_args(&["app.exe", "--wait-pid=12345"]),
+            Some(12345)
+        );
+        assert_eq!(
+            parse_wait_pid_from_args(&["app.exe", "--other-flag", "--wait-pid=999"]),
+            Some(999)
+        );
+        assert_eq!(
+            parse_wait_pid_from_args(&["app.exe", "--wait-pid=invalid"]),
+            None
+        );
+        assert_eq!(
+            parse_wait_pid_from_args(&["app.exe", "--something-else"]),
+            None
+        );
+        assert_eq!(
+            parse_wait_pid_from_args(Vec::<String>::new()),
+            None
+        );
+    }
 }

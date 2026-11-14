@@ -396,7 +396,7 @@ pub async fn ipc_invoke(
             Ok(Value::Null)
         }
         "restartAsAdmin" => {
-            restart_as_admin().await?;
+            restart_as_admin(&app_handle, &st).await?;
             Ok(Value::Null)
         }
         "setupFirewall" => {

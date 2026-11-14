@@ -108,3 +108,40 @@ pub fn json_to_yaml(val: JsonValue) -> YamlValue {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parses_empty_yaml_as_empty_object() {
+        assert_eq!(parse_yaml_to_json("  \n").unwrap(), json!({}));
+    }
+
+    #[test]
+    fn normalizes_numeric_and_null_short_ids_recursively() {
+        let value = parse_yaml_to_json(
+            "proxies:\n  - short-id: 1234\n  - nested:\n      short-id: null\n  - short-id: abc",
+        )
+        .unwrap();
+
+        assert_eq!(value["proxies"][0]["short-id"], json!("1234"));
+        assert_eq!(value["proxies"][1]["nested"]["short-id"], json!(""));
+        assert_eq!(value["proxies"][2]["short-id"], json!("abc"));
+    }
+
+    #[test]
+    fn round_trips_json_through_yaml() {
+        let original = json!({
+            "mode": "rule",
+            "mixed-port": 7897,
+            "tun": {"enable": false, "dns-hijack": ["any:53"]},
+            "rules": ["MATCH,DIRECT"]
+        });
+
+        let yaml = stringify_json_to_yaml(&original).unwrap();
+        let parsed = parse_yaml_to_json(&yaml).unwrap();
+        assert_eq!(parsed, original);
+    }
+}

@@ -220,7 +220,11 @@ const App: React.FC = () => {
           }}
           onConfirm={async () => {
             adminRestartRequestedRef.current = true
-            await restartAsAdmin()
+            try {
+              await restartAsAdmin()
+            } catch (e: unknown) {
+              toast.error(String(e))
+            }
           }}
           className="guide-admin-required-modal"
         />

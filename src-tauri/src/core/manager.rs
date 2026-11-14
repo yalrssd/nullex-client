@@ -85,6 +85,169 @@ fn apply_windows_cpu_priority(pid: u32, priority: &str) {
 #[cfg(not(windows))]
 fn apply_windows_cpu_priority(_pid: u32, _priority: &str) {}
 
+/// Force-kill a process tree if the process is still alive.
+/// Uses `taskkill /F /T /PID` on Windows for reliable tree termination.
+#[cfg(windows)]
+async fn kill_process_tree_if_alive(pid: u32) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE};
+    // Check if process is still alive
+    let alive = unsafe {
+        let h = OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() {
+            false
+        } else {
+            CloseHandle(h);
+            true
+        }
+    };
+    if alive {
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .creation_flags(0x0800_0000)
+            .output()
+            .await;
+    }
+}
+
+#[cfg(not(windows))]
+async fn kill_process_tree_if_alive(_pid: u32) {}
+
+/// Enumerate all running `mihomo.exe` processes whose executable path matches
+/// our sidecar path, and terminate any that are not our currently managed PID.
+/// Never touches processes from other VPN clients.
+#[cfg(windows)]
+pub async fn kill_orphan_cores(state: &Arc<AppState>) {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+    };
+
+    let our_sidecar = match crate::utils::dirs::mihomo_core_path("mihomo") {
+        Ok(p) => p.to_string_lossy().to_ascii_lowercase(),
+        Err(_) => return,
+    };
+    let managed_pid = state.core_pid.load(Ordering::SeqCst);
+
+    // Collect and kill orphans synchronously (no .await while holding raw handle)
+    let killed_pids: Vec<u32> = unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot.is_null() {
+            return;
+        }
+        let mut pids = Vec::new();
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+        if Process32FirstW(snapshot, &mut entry) != 0 {
+            loop {
+                let name_len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(0);
+                let name = OsString::from_wide(&entry.szExeFile[..name_len])
+                    .to_string_lossy()
+                    .to_ascii_lowercase();
+
+                if name == "mihomo.exe" {
+                    let pid = entry.th32ProcessID;
+                    if pid != managed_pid || managed_pid == 0 {
+                        let ph = OpenProcess(
+                            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+                            0,
+                            pid,
+                        );
+                        if !ph.is_null() {
+                            let mut buf = [0u16; 1024];
+                            let mut sz = buf.len() as u32;
+                            if QueryFullProcessImageNameW(ph, 0, buf.as_mut_ptr(), &mut sz) != 0 {
+                                let full_path = OsString::from_wide(&buf[..sz as usize])
+                                    .to_string_lossy()
+                                    .to_ascii_lowercase();
+                                if full_path == our_sidecar {
+                                    TerminateProcess(ph, 1);
+                                    pids.push(pid);
+                                }
+                            }
+                            CloseHandle(ph);
+                        }
+                    }
+                }
+                if Process32NextW(snapshot, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snapshot);
+        pids
+    };
+
+    // Log kills asynchronously (safe to await now)
+    for pid in killed_pids {
+        let _ = append_core_log_line(&format!("[WARN] Killed orphan mihomo.exe (pid={pid})")).await;
+    }
+}
+
+#[cfg(not(windows))]
+pub async fn kill_orphan_cores(_state: &Arc<AppState>) {}
+
+/// Create a Windows Job Object with KILL_ON_JOB_CLOSE and assign the child process to it.
+/// Returns the raw job handle (as isize) to store in AppState.
+#[cfg(windows)]
+fn create_job_for_child(child_pid: u32) -> Option<isize> {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_ALL_ACCESS};
+
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return None;
+        }
+
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) == 0
+        {
+            CloseHandle(job);
+            return None;
+        }
+
+        let ph = OpenProcess(PROCESS_ALL_ACCESS, 0, child_pid);
+        if ph.is_null() {
+            CloseHandle(job);
+            return None;
+        }
+
+        let ok = AssignProcessToJobObject(job, ph);
+        CloseHandle(ph);
+        if ok == 0 {
+            CloseHandle(job);
+            return None;
+        }
+
+        Some(job as isize)
+    }
+}
+
+#[cfg(not(windows))]
+fn create_job_for_child(_child_pid: u32) -> Option<isize> {
+    None
+}
+
 async fn append_core_log_line(line: &str) {
     let path = log_path();
     if let Some(parent) = path.parent() {
@@ -156,17 +319,35 @@ async fn test_profile_config(core_path: &Path) -> Result<(), String> {
 async fn stop_core_inner(state: &Arc<AppState>, app_handle: Option<&AppHandle>) {
     stop_mihomo_streams(state).await;
     stop_network_detection(state).await;
-    state.core_pid.store(0, Ordering::SeqCst);
+    let pid = state.core_pid.swap(0, Ordering::SeqCst);
 
+    // ── Service mode: ask service to stop first ──────────────────────────────
+    let app_cfg = get_app_config(state, false).await.unwrap_or_default();
+    if app_cfg.get("corePermissionMode").and_then(Value::as_str) == Some("service") {
+        if let Err(e) = service_api_post(state, "/core/stop", None).await {
+            let _ = append_core_log_line(&format!("[WARN] Service stop failed: {e}")).await;
+        }
+    }
+
+    // ── Kill the tracked child process ───────────────────────────────────────
     let child_opt = state.core_child.lock().await.take();
     if let Some(mut child) = child_opt {
         let _ = child.kill().await;
         let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
     }
 
-    let app_cfg = get_app_config(state, false).await.unwrap_or_default();
-    if app_cfg.get("corePermissionMode").and_then(Value::as_str) == Some("service") {
-        let _ = service_api_post(state, "/core/stop", None).await;
+    // ── Verify the process is actually gone; if not, force-kill ─────────────
+    if pid > 0 {
+        kill_process_tree_if_alive(pid).await;
+    }
+
+    // ── Close Job Object (kills core if still somehow alive) ─────────────────
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        if let Some(raw_handle) = state.core_job.lock().await.take() {
+            unsafe { CloseHandle(raw_handle as windows_sys::Win32::Foundation::HANDLE) };
+        }
     }
 
     set_core_state(state, app_handle, "stopped", None).await;
@@ -206,6 +387,8 @@ fn start_core_locked<'a>(
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send + 'a>> {
     Box::pin(async move {
         stop_core_inner(state, app_handle).await;
+        // Kill any orphaned mihomo.exe from previous sessions before starting
+        kill_orphan_cores(state).await;
     set_core_state(state, app_handle, "starting", None).await;
 
     let app_cfg = get_app_config(state, false).await?;
@@ -389,6 +572,11 @@ fn start_core_locked<'a>(
             .and_then(Value::as_str)
             .unwrap_or("normal");
         apply_windows_cpu_priority(pid, prio);
+
+        // Assign core to a Job Object so it dies with the client in all cases
+        if let Some(job_handle) = create_job_for_child(pid) {
+            *state.core_job.lock().await = Some(job_handle);
+        }
     }
 
     let ready_notify = Arc::new(Notify::new());

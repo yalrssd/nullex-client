@@ -279,7 +279,11 @@ const Mihomo: React.FC = () => {
           }}
           onGrant={async () => {
             if (platform === 'win32') {
-              await restartAsAdmin()
+              try {
+                await restartAsAdmin()
+              } catch (e: unknown) {
+                toast.error(String(e))
+              }
               return
             }
             await manualGrantCorePermition()

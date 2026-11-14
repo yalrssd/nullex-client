@@ -379,26 +379,68 @@ pub async fn get_image_data_url(state: &Arc<AppState>, url: &str) -> Result<Stri
     Ok(format!("data:{mime};base64,{}", STANDARD.encode(&bytes)))
 }
 
-pub async fn restart_as_admin() -> Result<(), String> {
+pub async fn restart_as_admin(
+    app_handle: &AppHandle,
+    state: &Arc<AppState>,
+) -> Result<(), String> {
     #[cfg(windows)]
     {
-        let exe = exe_path().to_string_lossy().to_string();
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW, SEE_MASK_NOCLOSEPROCESS};
+
+        // 1. Stop core and system proxy before elevating
+        crate::core::manager::stop_core(state, Some(app_handle)).await?;
+        crate::sys::sysproxy::disable_sys_proxy_sync(false);
+
+        let exe = exe_path();
         let pid = std::process::id();
-        let ps_cmd = format!(
-            "Start-Process -FilePath '{}' -Verb RunAs -ArgumentList '--wait-pid={pid}'",
-            exe.replace('\'', "''")
-        );
-        let mut cmd = Command::new("powershell.exe");
-        cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_cmd])
-            .creation_flags(CREATE_NO_WINDOW);
-        let out = cmd
-            .output()
-            .await
-            .map_err(|e| format!("Failed restarting as admin: {e}"))?;
-        if !out.status.success() {
-            return Err("UAC elevation was cancelled or failed".to_string());
+
+        // Build the --wait-pid argument as a wide string
+        let verb: Vec<u16> = "runas\0".encode_utf16().collect();
+        let file: Vec<u16> = exe
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0u16))
+            .collect();
+        let params_str = format!("--wait-pid={pid}\0");
+        let params: Vec<u16> = params_str.encode_utf16().collect();
+
+        let mut sei = SHELLEXECUTEINFOW {
+            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+            fMask: SEE_MASK_NOCLOSEPROCESS,
+            hwnd: std::ptr::null_mut(),
+            lpVerb: verb.as_ptr(),
+            lpFile: file.as_ptr(),
+            lpParameters: params.as_ptr(),
+            lpDirectory: std::ptr::null(),
+            nShow: 1, // SW_NORMAL
+            hInstApp: std::ptr::null_mut(),
+            lpIDList: std::ptr::null_mut(),
+            lpClass: std::ptr::null(),
+            hkeyClass: std::ptr::null_mut(),
+            dwHotKey: 0,
+            Anonymous: unsafe { std::mem::zeroed() },
+            hProcess: std::ptr::null_mut(),
+        };
+
+        let ok = unsafe { ShellExecuteExW(&mut sei) };
+        if ok == 0 {
+            let err = unsafe { windows_sys::Win32::Foundation::GetLastError() };
+            // ERROR_CANCELLED = 1223 → user cancelled UAC → do NOT exit
+            if err == 1223 {
+                return Err("UAC elevation was cancelled by user".to_string());
+            }
+            return Err(format!("ShellExecuteExW failed: error code {err}"));
         }
-        std::process::exit(0);
+
+        // Close the new process handle — it'll wait for us via --wait-pid
+        if !sei.hProcess.is_null() {
+            unsafe { CloseHandle(sei.hProcess) };
+        }
+
+        // 2. Exit cleanly via app_handle so RunEvent::Exit fires
+        app_handle.exit(0);
+        Ok(())
     }
     #[cfg(not(windows))]
     Err("Not supported".to_string())

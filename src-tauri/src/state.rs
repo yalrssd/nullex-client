@@ -89,6 +89,11 @@ pub struct AppState {
     pub not_quit_dialog: AtomicBool,
     pub last_quit_attempt_ms: AtomicI64,
 
+    /// Windows Job Object handle (isize = HANDLE). The core sidecar is assigned
+    /// to this job with KILL_ON_JOB_CLOSE so it dies with the client in all
+    /// termination scenarios (crash, Task Manager kill, etc.).
+    pub core_job: Mutex<Option<isize>>,
+
     pub quit_confirm_tx: Mutex<Option<tokio::sync::oneshot::Sender<bool>>>,
     pub install_confirm_tx: Mutex<Option<tokio::sync::oneshot::Sender<bool>>>,
 
@@ -129,6 +134,7 @@ impl Default for AppState {
             is_quitting: AtomicBool::new(false),
             not_quit_dialog: AtomicBool::new(false),
             last_quit_attempt_ms: AtomicI64::new(0),
+            core_job: Mutex::new(None),
             quit_confirm_tx: Mutex::new(None),
             install_confirm_tx: Mutex::new(None),
             update_cancel: Arc::new(AtomicBool::new(false)),
